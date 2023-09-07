@@ -32,6 +32,7 @@
 
 /* from libvarnish/vtim.c */
 extern unsigned VTIM_postel;
+extern volatile vtim_mono vjiffies_us;
 #define VTIM_FORMAT_SIZE 30
 void VTIM_format(vtim_real t, char *p);
 vtim_real VTIM_parse(const char *p);
