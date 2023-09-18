@@ -126,6 +126,18 @@ PARAM_SIMPLE(
 )
 
 PARAM_SIMPLE(
+	/* name */	tick_rate,
+	/* type */	timeout,
+	/* min */	"0.000001",
+	/* max */	"1",
+	/* def */	"1",
+	/* units */	"seconds",
+	/* descr */
+	"Tick rate of the worker process.",
+	/* flags */	EXPERIMENTAL
+)
+
+PARAM_SIMPLE(
 	/* name */	auto_restart,
 	/* type */	boolean,
 	/* min */	NULL,

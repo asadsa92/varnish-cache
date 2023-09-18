@@ -145,6 +145,8 @@ static const unsigned enable_so_keepalive = 1;
 
 static const unsigned enable_tcp_nodelay = 1;
 
+volatile vtim_mono vjiffies_us;
+
 /*--------------------------------------------------------------------
  * lacking a better place, we put some generic periodic updates
  * into the vca_acct() loop which we are running anyway
@@ -156,6 +158,7 @@ vca_periodic(vtim_real t0)
 
 	now = VTIM_real();
 	VSC_C_main->uptime = (uint64_t)(now - t0);
+	vjiffies_us = 1e6 * VTIM_mono();
 
 	VTIM_postel = FEATURE(FEATURE_HTTP_DATE_POSTEL);
 }
@@ -647,7 +650,7 @@ vca_acct(void *arg)
 	pool_accepting = 1;
 
 	while (1) {
-		(void)sleep(1);
+		(void)sleep(cache_param->tick_rate);
 		if (vca_sock_opt_init()) {
 			PTOK(pthread_mutex_lock(&shut_mtx));
 			VTAILQ_FOREACH(ls, &heritage.socks, list) {
