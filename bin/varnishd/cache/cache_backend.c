@@ -161,24 +161,6 @@ vbe_connwait_signal_locked(struct backend *bp)
 	PTOK(pthread_cond_signal(&cw->cw_cond));
 }
 
-static void
-vbe_connwait_dequeue_locked(struct backend *bp, struct connwait *cw)
-{
-	Lck_AssertHeld(bp->director->mtx);
-	bp->n_conn++;
-	VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
-	cw->cw_state = CW_DEQUEUED;
-}
-
-static void
-vbe_connwait_fini(struct connwait *cw)
-{
-	CHECK_OBJ_NOTNULL(cw, CONNWAIT_MAGIC);
-	assert(cw->cw_state != CW_QUEUED);
-	PTOK(pthread_cond_destroy(&cw->cw_cond));
-	FINI_OBJ(cw);
-}
-
 static int
 vbe_connwait(struct backend *bp)
 {
@@ -212,13 +194,14 @@ vbe_connwait(struct backend *bp)
 			err = Lck_CondWaitUntil(&cw->cw_cond,
 			    bp->director->mtx, wait_end);
 		} while (err == EINTR);
+		VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
 		bp->cw_count--;
 		if (err == 0 || !BE_BUSY(bp)) {
-			vbe_connwait_dequeue_locked(bp, cw);
+			bp->n_conn++;
+			cw->cw_state = CW_DEQUEUED;
 			break;
 		}
 
-		VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
 		VSC_C_main->backend_wait_fail++;
 		cw->cw_state = CW_BE_BUSY;
 		break;
@@ -230,14 +213,10 @@ vbe_connwait(struct backend *bp)
 	}
 	Lck_Unlock(bp->director->mtx);
 
-	if (cw->cw_state == CW_BE_BUSY) {
-		vbe_connwait_fini(cw);
-		return (-1);
-	}
+	assert(cw->cw_state != CW_QUEUED);
+	PTOK(pthread_cond_destroy(&cw->cw_cond));
 
-	vbe_connwait_fini(cw);
-	/* XXX: cw is now garbage */
-	return (0);
+	return (cw->cw_state == CW_BE_BUSY);
 }
 
 /*--------------------------------------------------------------------
