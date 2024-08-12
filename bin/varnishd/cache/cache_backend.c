@@ -271,6 +271,9 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 		return (NULL);
 	}
 
+	vbe_connwait_fini(cw);
+	/* XXX: cw is now garbage */
+
 	FIND_TMO(connect_timeout, tmod, bo, bp);
 	pfd = VCP_Get(bp->conn_pool, tmod, wrk, force_fresh, &err);
 	if (pfd == NULL) {
@@ -284,7 +287,6 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 		     VRT_BACKEND_string(dir), err, VAS_errtxt(err));
 		VSC_C_main->backend_fail++;
 		bo->htc = NULL;
-		vbe_connwait_fini(cw);
 		return (NULL);
 	}
 
@@ -312,7 +314,6 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 		bp->n_conn--;
 		vbe_connwait_signal_locked(bp);
 		Lck_Unlock(bp->director->mtx);
-		vbe_connwait_fini(cw);
 		return (NULL);
 	}
 	bo->acct.bereq_hdrbytes += err;
@@ -336,7 +337,6 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 	    bo->htc->first_byte_timeout, bo, bp);
 	FIND_TMO(between_bytes_timeout,
 	    bo->htc->between_bytes_timeout, bo, bp);
-	vbe_connwait_fini(cw);
 	return (pfd);
 }
 
