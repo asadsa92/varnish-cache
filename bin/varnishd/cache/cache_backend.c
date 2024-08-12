@@ -177,6 +177,65 @@ vbe_connwait_fini(struct connwait *cw)
 	FINI_OBJ(cw);
 }
 
+static int
+vbe_connwait(struct backend *bp)
+{
+	struct connwait cw[1];
+	unsigned wait_limit;
+	vtim_dur wait_tmod;
+	vtim_dur wait_end;
+	int err;
+
+	INIT_OBJ(cw, CONNWAIT_MAGIC);
+	PTOK(pthread_cond_init(&cw->cw_cond, NULL));
+	Lck_Lock(bp->director->mtx);
+	FIND_BE_PARAM(backend_wait_limit, wait_limit, bp);
+	FIND_BE_TMO(backend_wait_timeout, wait_tmod, bp);
+	cw->cw_state = CW_DO_CONNECT;
+	if (!VTAILQ_EMPTY(&bp->cw_head) || BE_BUSY(bp))
+		cw->cw_state = CW_BE_BUSY;
+
+	switch (cw->cw_state) {
+	case CW_BE_BUSY:
+		if (wait_limit > 0 && wait_tmod > 0.0 &&
+		    bp->cw_count < wait_limit) {
+			VTAILQ_INSERT_TAIL(&bp->cw_head, cw, cw_list);
+			bp->cw_count++;
+			VSC_C_main->backend_wait++;
+			cw->cw_state = CW_QUEUED;
+			wait_end = VTIM_real() + wait_tmod;
+			do {
+				err = Lck_CondWaitUntil(&cw->cw_cond,
+				    bp->director->mtx, wait_end);
+			} while (err == EINTR);
+			bp->cw_count--;
+			if (err != 0 && BE_BUSY(bp)) {
+				VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
+				VSC_C_main->backend_wait_fail++;
+				cw->cw_state = CW_BE_BUSY;
+				break;
+			}
+			vbe_connwait_dequeue_locked(bp, cw);
+		}
+		break;
+	case CW_DO_CONNECT:
+		bp->n_conn++;
+		break;
+	default:
+		WRONG("Unexpected cw_state");
+	}
+	Lck_Unlock(bp->director->mtx);
+
+	if (cw->cw_state == CW_BE_BUSY) {
+		vbe_connwait_fini(cw);
+		return (-1);
+	}
+
+	vbe_connwait_fini(cw);
+	/* XXX: cw is now garbage */
+	return (0);
+}
+
 /*--------------------------------------------------------------------
  * Get a connection to the backend
  *
@@ -275,6 +334,7 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 
 	vbe_connwait_fini(cw);
 	/* XXX: cw is now garbage */
+	(void)vbe_connwait;
 
 	FIND_TMO(connect_timeout, tmod, bo, bp);
 	pfd = VCP_Get(bp->conn_pool, tmod, wrk, force_fresh, &err);
