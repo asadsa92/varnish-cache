@@ -209,6 +209,18 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 		VSC_C_main->backend_unhealthy++;
 		return (NULL);
 	}
+
+	AZ(bo->htc);
+	bo->htc = WS_Alloc(bo->ws, sizeof *bo->htc);
+	/* XXX: we may want to detect the ws overflow sooner */
+	if (bo->htc == NULL) {
+		VSLb(bo->vsl, SLT_FetchError, "out of workspace");
+		/* XXX: counter ? */
+		return (NULL);
+	}
+	bo->htc->doclose = SC_NULL;
+	CHECK_OBJ_NOTNULL(bo->htc->doclose, STREAM_CLOSE_MAGIC);
+
 	INIT_OBJ(cw, CONNWAIT_MAGIC);
 	PTOK(pthread_cond_init(&cw->cw_cond, NULL));
 	Lck_Lock(bp->director->mtx);
@@ -254,26 +266,10 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 		     "backend %s: busy", VRT_BACKEND_string(dir));
 		bp->vsc->busy++;
 		VSC_C_main->backend_busy++;
+		bo->htc = NULL;
 		vbe_connwait_fini(cw);
 		return (NULL);
 	}
-
-	AZ(bo->htc);
-	bo->htc = WS_Alloc(bo->ws, sizeof *bo->htc);
-	/* XXX: we may want to detect the ws overflow sooner */
-	if (bo->htc == NULL) {
-		VSLb(bo->vsl, SLT_FetchError, "out of workspace");
-		/* XXX: counter ? */
-		if (cw->cw_state == CW_QUEUED) {
-			Lck_Lock(bp->director->mtx);
-			vbe_connwait_dequeue_locked(bp, cw);
-			Lck_Unlock(bp->director->mtx);
-		}
-		vbe_connwait_fini(cw);
-		return (NULL);
-	}
-	bo->htc->doclose = SC_NULL;
-	CHECK_OBJ_NOTNULL(bo->htc->doclose, STREAM_CLOSE_MAGIC);
 
 	FIND_TMO(connect_timeout, tmod, bo, bp);
 	pfd = VCP_Get(bp->conn_pool, tmod, wrk, force_fresh, &err);
