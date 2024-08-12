@@ -149,14 +149,16 @@ vbe_connwait_signal_locked(struct backend *bp)
 	assert(bp->n_conn > 0);
 	bp->n_conn--;
 
-	if (bp->n_conn < bp->max_connections) {
-		cw = VTAILQ_FIRST(&bp->cw_head);
-		if (cw != NULL) {
-			CHECK_OBJ(cw, CONNWAIT_MAGIC);
-			assert(cw->cw_state == CW_QUEUED);
-			PTOK(pthread_cond_signal(&cw->cw_cond));
-		}
-	}
+	if (bp->n_conn >= bp->max_connections)
+		return;
+
+	cw = VTAILQ_FIRST(&bp->cw_head);
+	CHECK_OBJ_ORNULL(cw, CONNWAIT_MAGIC);
+	if (cw == NULL)
+		return;
+
+	assert(cw->cw_state == CW_QUEUED);
+	PTOK(pthread_cond_signal(&cw->cw_cond));
 }
 
 static void
@@ -197,26 +199,28 @@ vbe_connwait(struct backend *bp)
 
 	switch (cw->cw_state) {
 	case CW_BE_BUSY:
-		if (wait_limit > 0 && wait_tmod > 0.0 &&
-		    bp->cw_count < wait_limit) {
-			VTAILQ_INSERT_TAIL(&bp->cw_head, cw, cw_list);
-			bp->cw_count++;
-			VSC_C_main->backend_wait++;
-			cw->cw_state = CW_QUEUED;
-			wait_end = VTIM_real() + wait_tmod;
-			do {
-				err = Lck_CondWaitUntil(&cw->cw_cond,
-				    bp->director->mtx, wait_end);
-			} while (err == EINTR);
-			bp->cw_count--;
-			if (err != 0 && BE_BUSY(bp)) {
-				VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
-				VSC_C_main->backend_wait_fail++;
-				cw->cw_state = CW_BE_BUSY;
-				break;
-			}
+		if (wait_limit <= 0 || wait_tmod <= 0.0 ||
+		    bp->cw_count >= wait_limit)
+			break;
+
+		VTAILQ_INSERT_TAIL(&bp->cw_head, cw, cw_list);
+		bp->cw_count++;
+		VSC_C_main->backend_wait++;
+		cw->cw_state = CW_QUEUED;
+		wait_end = VTIM_real() + wait_tmod;
+		do {
+			err = Lck_CondWaitUntil(&cw->cw_cond,
+			    bp->director->mtx, wait_end);
+		} while (err == EINTR);
+		bp->cw_count--;
+		if (err == 0 || !BE_BUSY(bp)) {
 			vbe_connwait_dequeue_locked(bp, cw);
+			break;
 		}
+
+		VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
+		VSC_C_main->backend_wait_fail++;
+		cw->cw_state = CW_BE_BUSY;
 		break;
 	case CW_DO_CONNECT:
 		bp->n_conn++;
