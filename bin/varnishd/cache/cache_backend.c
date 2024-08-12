@@ -293,11 +293,6 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 	AN(fdp);
 	assert(*fdp >= 0);
 
-	Lck_Lock(bp->director->mtx);
-	bp->vsc->conn++;
-	bp->vsc->req++;
-	Lck_Unlock(bp->director->mtx);
-
 	CHECK_OBJ_NOTNULL(bo->htc->doclose, STREAM_CLOSE_MAGIC);
 
 	err = 0;
@@ -315,14 +310,17 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 		AZ(pfd);
 		Lck_Lock(bp->director->mtx);
 		bp->n_conn--;
-		bp->vsc->conn--;
-		bp->vsc->req--;
 		vbe_connwait_signal_locked(bp);
 		Lck_Unlock(bp->director->mtx);
 		vbe_connwait_fini(cw);
 		return (NULL);
 	}
 	bo->acct.bereq_hdrbytes += err;
+
+	Lck_Lock(bp->director->mtx);
+	bp->vsc->conn++;
+	bp->vsc->req++;
+	Lck_Unlock(bp->director->mtx);
 
 	PFD_LocalName(pfd, abuf1, sizeof abuf1, pbuf1, sizeof pbuf1);
 	PFD_RemoteName(pfd, abuf2, sizeof abuf2, pbuf2, sizeof pbuf2);
