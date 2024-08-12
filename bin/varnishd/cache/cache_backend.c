@@ -140,11 +140,14 @@ VBE_Connect_Error(struct VSC_vbe *vsc, int err)
 /*--------------------------------------------------------------------*/
 
 static void
-vbe_connwait_signal_locked(const struct backend *bp)
+vbe_connwait_signal_locked(struct backend *bp)
 {
 	struct connwait *cw;
 
 	Lck_AssertHeld(bp->director->mtx);
+
+	assert(bp->n_conn > 0);
+	bp->n_conn--;
 
 	if (bp->n_conn < bp->max_connections) {
 		cw = VTAILQ_FIRST(&bp->cw_head);
@@ -162,7 +165,6 @@ vbe_connwait_dequeue_locked(struct backend *bp, struct connwait *cw)
 	Lck_AssertHeld(bp->director->mtx);
 	bp->n_conn++;
 	VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
-	vbe_connwait_signal_locked(bp);
 	cw->cw_state = CW_DEQUEUED;
 }
 
@@ -279,7 +281,6 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 	if (pfd == NULL) {
 		Lck_Lock(bp->director->mtx);
 		VBE_Connect_Error(bp->vsc, err);
-		bp->n_conn--;
 		vbe_connwait_signal_locked(bp);
 		Lck_Unlock(bp->director->mtx);
 		VSLb(bo->vsl, SLT_FetchError,
@@ -311,7 +312,6 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 		VCP_Close(&pfd);
 		AZ(pfd);
 		Lck_Lock(bp->director->mtx);
-		bp->n_conn--;
 		vbe_connwait_signal_locked(bp);
 		Lck_Unlock(bp->director->mtx);
 		return (NULL);
@@ -372,8 +372,6 @@ vbe_dir_finish(VRT_CTX, VCL_BACKEND d)
 		VSC_C_main->backend_recycle++;
 		VCP_Recycle(bo->wrk, &pfd);
 	}
-	assert(bp->n_conn > 0);
-	bp->n_conn--;
 	AN(bp->vsc);
 	bp->vsc->conn--;
 #define ACCT(foo)	bp->vsc->foo += bo->acct.foo;
