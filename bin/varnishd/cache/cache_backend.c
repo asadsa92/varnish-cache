@@ -218,26 +218,35 @@ vbe_dir_getfd(VRT_CTX, struct worker *wrk, VCL_BACKEND dir, struct backend *bp,
 	if (!VTAILQ_EMPTY(&bp->cw_head) || BE_BUSY(bp))
 		cw->cw_state = CW_BE_BUSY;
 
-	if (cw->cw_state == CW_BE_BUSY && wait_limit > 0 &&
-	    wait_tmod > 0.0 && bp->cw_count < wait_limit) {
-		VTAILQ_INSERT_TAIL(&bp->cw_head, cw, cw_list);
-		bp->cw_count++;
-		VSC_C_main->backend_wait++;
-		cw->cw_state = CW_QUEUED;
-		wait_end = VTIM_real() + wait_tmod;
-		do {
-			err = Lck_CondWaitUntil(&cw->cw_cond, bp->director->mtx,
-			    wait_end);
-		} while (err == EINTR);
-		bp->cw_count--;
-		if (err != 0 && BE_BUSY(bp)) {
-			VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
-			VSC_C_main->backend_wait_fail++;
-			cw->cw_state = CW_BE_BUSY;
-		} else
+	switch (cw->cw_state) {
+	case CW_BE_BUSY:
+		if (wait_limit > 0 && wait_tmod > 0.0 &&
+		    bp->cw_count < wait_limit) {
+			VTAILQ_INSERT_TAIL(&bp->cw_head, cw, cw_list);
+			bp->cw_count++;
+			VSC_C_main->backend_wait++;
+			cw->cw_state = CW_QUEUED;
+			wait_end = VTIM_real() + wait_tmod;
+			do {
+				err = Lck_CondWaitUntil(&cw->cw_cond,
+				    bp->director->mtx, wait_end);
+			} while (err == EINTR);
+			bp->cw_count--;
+			if (err != 0 && BE_BUSY(bp)) {
+				VTAILQ_REMOVE(&bp->cw_head, cw, cw_list);
+				VSC_C_main->backend_wait_fail++;
+				cw->cw_state = CW_BE_BUSY;
+				break;
+			}
 			vbe_connwait_dequeue_locked(bp, cw);
-	} else if (cw->cw_state == CW_DO_CONNECT)
+		}
+		break;
+	case CW_DO_CONNECT:
 		bp->n_conn++;
+		break;
+	default:
+		WRONG("Unexpected cw_state");
+	}
 	Lck_Unlock(bp->director->mtx);
 
 	if (cw->cw_state == CW_BE_BUSY) {
