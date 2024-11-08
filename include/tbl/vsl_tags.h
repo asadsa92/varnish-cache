@@ -138,9 +138,9 @@ SLTM(SessClose, 0, "Client connection closed",
 SLTM(BackendOpen, 0, "Backend connection opened",
 	"Logged when a new backend connection is opened.\n\n"
 	"The format is::\n\n"
-	"\t%d %s %s %s %s %s %s [ %.6f %ld ]\n"
-	"\t|  |  |  |  |  |  |    |    |\n"
-	"\t|  |  |  |  |  |  |    |    +- Connection reuses\n"
+	"\t%d %s %s %s %s %s %s [ %f %ld ]\n"
+	"\t|  |  |  |  |  |  |    |  |\n"
+	"\t|  |  |  |  |  |  |    |  +--- Connection reuses\n"
 	"\t|  |  |  |  |  |  |    +------ Connection age\n"
 	"\t|  |  |  |  |  |  +----------- \"connect\" or \"reuse\"\n"
 	"\t|  |  |  |  |  +-------------- Local port\n"

@@ -137,13 +137,13 @@ PFD_Fd(struct pfd *p)
 vtim_dur
 PFD_Age(const struct pfd *p)
 {
-	vtim_mono now;
+	vtim_mono t_mono;
 
 	CHECK_OBJ_NOTNULL(p, PFD_MAGIC);
-	now = VTIM_mono();
-	assert(now >= p->created);
+	t_mono = VTIM_mono();
+	assert(t_mono >= p->created);
 
-	return (now - p->created);
+	return (t_mono - p->created);
 }
 
 uint64_t
