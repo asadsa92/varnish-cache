@@ -48,7 +48,7 @@
 
 #define VRT_MAJOR_VERSION	21U
 
-#define VRT_MINOR_VERSION	0U
+#define VRT_MINOR_VERSION	1U
 
 /***********************************************************************
  * Major and minor VRT API versions.
@@ -57,6 +57,8 @@
  * Whenever something is deleted or changed in a way which is not
  * binary/load-time compatible, increment MAJOR version
  *
+ * 21.1 (2025-05-13)
+ *	vmodtool.py syntax version upgraded to 2.0
  * 21.0 (2025-03-17)
  *	VRT_u_req_grace() added
  *	VRT_u_req_ttl() added
