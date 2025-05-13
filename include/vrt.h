@@ -48,7 +48,7 @@
 
 #define VRT_MAJOR_VERSION	20U
 
-#define VRT_MINOR_VERSION	1U
+#define VRT_MINOR_VERSION	2U
 
 /***********************************************************************
  * Major and minor VRT API versions.
@@ -57,6 +57,8 @@
  * Whenever something is deleted or changed in a way which is not
  * binary/load-time compatible, increment MAJOR version
  *
+ * 20.2 (2025-05-13)
+ *	vmodtool.py syntax version upgraded to 2.0
  * 20.1 (2024-11-08)
  *	VDI_EVENT_SICK added to enum vcl_event_e
  * 20.0 (2024-09-13)
